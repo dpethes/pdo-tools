@@ -1,9 +1,11 @@
 ## Changelog
 
-### v0.10 (x.y.2022)
+### v0.10 (4.8.2022)
 
 * improved support for Pepakura version 4 and higher
 * option to merge tabs with outlines https://github.com/dpethes/pdo-tools-v2/issues/3
+* updated compression library (faster loading and exports)
+* github source release
 
 ### v0.9 (25.1.2018)
 
