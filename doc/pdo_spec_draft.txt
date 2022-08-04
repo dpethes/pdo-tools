@@ -1,0 +1,308 @@
+"PDOv3" format description
+==========================
+
+PDOv3 (unofficial name, derived from the file magic "version 3") is the format
+used by Tamasoft's Pepakura Designer version 2 and later. It stores
+the representation of a 3D object and its unfolded version (polygons transformed
+to a single plane), that can be used to build a paper model.
+There are three minor versions of this format, for which the header and some 
+fields differ:
+* first version (nicknamed V4), is used by Designer 2.x
+* second version (V5), used by Designer 3.x series
+* third version (V6), used by Designer 4.x & 5.x series
+
+Format contains a couple of variable-length strings, which are always prefixed by string's length. Strings appear to be mostly zero-terminated as well.
+Codepage for strings - Windows Codepage 932 for Japanese (also known as CP932, Shift-JIS), can be used even if codepage string is set to 'us-ascii' (see the cube.pdo sample).
+Examples of japanese strings: 
+  オブジェクト - 'object' as object name
+  ＭＳ ゴシック - 'Ms Gothic' as font name (see http://en.wikipedia.org/wiki/List_of_CJK_fonts#Sans-serif)
+Multi-byte values are stored in little-endian order.
+
+element description format:
+  size in B [data type] : description [possible values]
+element grouping block:
+  [name] { 1..N elements } 
+array of elements:
+  array[number of elements] of [element name]
+
+File Structure
+PDO {
+  FILE HEADER
+  OBJECTS
+  MATERIALS
+  UNFOLD DATA
+  SETTINGS
+}
+
+Zero/null terminated string with specified length, 1 or 2 bytes per char (specified in FILE HEADER)
+STRING {
+  4B : length
+  if (length > 0) {
+    array[length] of char
+  }
+}
+
+BOUNDING BOX {
+  8B float : bounding box left (relative to page margins)
+  8B float : bounding box top
+  8B float : bounding box width
+  8B float : bounding box height
+} 32B
+
+FILE HEADER {
+  10B: format major version - string 'version 3' followed by 0xA byte
+  4B : sub_version: format minor version, versions 4, 5 and 6 are known
+  4B : multi-byte strings flag MBSF - 2 bytes per char if set, 1 byte otherwise
+  4B : unknown, probably Pepakura Designer release internal number
+  if (sub_version > 4) {
+    xB STRING : (usually) 'Pepakura Designer N', where N is the version of the Designer that saved the file (3,4,5)
+    4B : string's character shift: 
+        subtract this number from all string char's binary value to get the proper char: real_char = stored_char - shift
+        Possible values:  random values in interval <7,230> or wider (not enough samples to confirm, but probably whole byte range). 
+        Can cause underflow.
+  }
+  xB STRING : locale string. most used values: 'en-US', 'ja-JP', possibly empty
+  xB STRING : codepage string. most used values: 'us-ascii', 'Sfhit-JIS' (Shift-JIS with a typo),
+              possibly others: '0', '932' (Japanese), '936' (simplified Chinese)
+              
+  4B : texture lock TLCK, allow viewer to change textures in locked files:
+          2 = allow
+          1 = disallow
+          0 = no effect - unlocked file
+  if (sub_version == 6) {
+    1B : password flag, 0=no password, 1=read-only file, designer won't open it without password
+    1B : "show author and comment at startup" flag: 1 = show
+  }
+  32B/64B STRING : MD5 hash, length depending on MBSF
+  if (sub_version == 6) {
+    4B int : V6_LOCK
+    for (i = 0; i < V6_LOCK; i++) {
+      8B double - ? half of maximum from x/y/z dimensions ?
+    }
+  } else if (sub_version > 4) {
+    1B : "show author and comment at startup" flag: 1 = show
+    1B : password flag, 0=no password (read-only file, designer won't open it)
+  }
+    
+  8B double : maximum from x/y/z dimensions in 3D model units, multiply with unfold model scale to get the real size
+  8B double : object origin for x-axis
+  8B double : object origin for y-axis
+  8B double : object origin for z-axis
+}
+Notes:
+MD5 hash: 
+  -the hashed value is generated as:
+    hash = MD5(string(edge_count + face_count) + password + string(TLCK))
+Object origins seem to be ignored in viewer, it probably centers the view to the bounding box of the object
+
+
+OBJECTS {
+  4B : number of objects NOB
+  array[NOB] of OBJECT
+}
+
+OBJECT {
+  xB STRING : object name
+  1B : visibility flag, 1 = visible
+  4B : num of vertices NOV
+  array[NOV] of VERTEX
+  4B : num of faces NOF
+  array[NOF] of FACE
+  4B : number of edges NOL
+  array[NOL] of EDGE
+}
+
+Vertex coordinates in 3D space
+VERTEX {
+  8B float : X
+  8B float : Y
+  8B float : Z
+} 24B
+  
+Face - triangle or quad
+FACE {
+  4B int : material index, -1=no material
+  4B int : unfolded part index
+  4x8B   : quaternion used to make the face 'flat'
+  4B int : number of vertices in face NVF (3 or 4 most of the time, can be higher though)
+  array[NVF] of 2D VERTEX 
+}
+
+Vertex coordinates in 2D space
+2D VERTEX {
+  4B int   : vertex index - link to the corresponding vertex in 3d space
+  8B float : X
+  8B float : Y
+  8B float : U
+  8B float : V
+  1B bool  : has flap flag
+  8B float : flap height (in mm)
+  8B float : flap angle left (in radians)
+  8B float : flap angle right (in radians)
+  4B : flap lines Red
+  4B : flap lines Green
+  4B : flap lines Blue
+  4B : fold line Red 
+  4B : fold line Green
+  4B : fold line Blue  
+} 85B
+
+EDGE {
+  4B int : 1.face index - edge belongs to this face
+  4B int : 2.face index - edge belongs to this face; if index=-1 then edge belongs to just one face
+  4B int : 1.vertex index
+  4B int : 2.vertex index
+  2B int : connects_faces
+  4B int : no_connected_face
+} 22B 
+
+MATERIALS {
+  4B int : number of materials NOM
+  array[NOM] of MATERIAL 
+}
+
+MATERIAL {
+  xB STRING : material name
+  4*4B : material color RGBA - float 4B 0x3f800000 = 1.0f
+  4*4B : 3D material color RGBA - float 4B
+  4*4B : light color RGBA - float 4B
+  4*4B : diffuse color RGBA - float 4B
+  4*4B : 2D material color ARGB - float 4B
+  1B : texture flag TF
+  if (TF == 1) {
+    TEXTURE
+  }
+}
+
+TEXTURE {
+  4B int : width
+  4B int : height
+  4B int : texture data size 
+  xB : texture data coded using Deflate compression within zlib wrapper. See RFC1950 http://tools.ietf.org/rfc/rfc1950.txt
+       texture format: RGB (interleaved color channel values), top left row first
+}
+note:
+Top left row first order is in reference to original data, before storing in PDO.
+PDO uses the texture in bottom row first order, therefore the V coordinate in FVERTEX gets flipped. 
+Probably because windows bitmap works with this order too, and it was easier to flip a coordinate than the whole texture.
+Multiple materials can use duplicated version of the same texture, which potentially increases the file size by a huge margin.
+
+UNFOLD DATA {
+  1B byte : unfold data present flag UF
+  if (UF == 1) {
+      8B float : scale
+      1B byte  : zero padding
+      32B BOUNDING BOX : page parts bounding box
+      4B : number of page parts NPP
+      array[NPP] of PART
+      4B : number of text blocks NTB
+      array[NTB] of TEXT BLOCK
+      4B : number of images (shown over unfolded parts) NIBO
+      array[NIBO] of IMAGE
+      4B : number of imags (shown under unfolded parts) NIBU
+      array[NIBU] of IMAGE
+  }
+}
+notes: 
+-A4 page margin is set to 15mm by default
+-bounding box distances/sizes are in mm
+
+Unfolded part
+PART {
+  4B int   : object index
+  32B BOUNDING BOX : part bounding box, including flaps
+  if (sub_version > 4) {
+    xB STRING : part name
+  }
+  4B : number of part's lines NOPL
+  array[NOPL] of LINE
+}
+
+Unfolded part's line
+LINE {
+  1B bool : hidden line flag, 1=hidden
+  4B int  : line type, 0 = cut line, 1 = mountain, 2 = valley, 3 = invisible, 4+ = invisible/noflap
+       ? doesn't seem to match, verify
+  1B int  : padding, always 1
+  4B int  : face index
+  4B int  : vertex index?
+  1B bool : face connection flag CF
+  if (CF == 1) {
+    4B int  : face index
+    4B int  : vertex index?
+  }
+}
+note: 
+-indices are with respect to part's object index
+
+TEXT BLOCK {
+  32B BOUNDING BOX
+  8B float : space between lines in mm
+  4B       : text color - RGB0 (4x1B)
+  4B int   : font pt size
+  xB STRING: string, font name
+  4B int   : number of text lines NTL
+  array[NTL] of STRING : text
+}
+
+IMAGE {
+  32B BOUNDING BOX
+  TEXTURE
+}
+
+No idea, doesn't seem to have any effect?
+UNKNOWN_ITEM {
+{ 
+  4B int : UNKNOWN_ITEM_LENGTH
+  array[UNKNOWN_ITEM_LENGTH] of 4B int
+}
+
+
+Presentation settings
+SETTINGS {
+  if (sub_version == 6) {
+    4B int : UNKNOWN_ITEMS_N
+    array[UNKNOWN_ITEMS_N] of UNKNOWN_ITEM
+  }
+  1B bool: show flaps
+  1B bool: show edge ID
+  1B bool: place edge ID inside face
+  1B bool: face material
+  
+  1B bool: hide almost flat fold lines
+  4B int : fold lines hiding angle in degrees
+  1B bool: draw white line under dot line
+  
+  4B int : mountain fold line style, 0=solid, 1=none, 2=dot
+  4B int : valley fold line style, 0=solid, 1=none, 2=dot
+  4B int : cut line, 0=solid, 1=none 
+  4B int : edge ID font size
+  
+  PAGE SETTINGS
+  {
+    4B int : page type PT
+              0=A4, 1=A3, 2=A2, 3=A1,
+              4=B5, 5=B4, 6=B3, 7=B2, 8=B1
+              9=letter, 10=legal,
+              11=other (custom)
+    if (PT == 11) {
+      8B float : page width
+      8B float : page height
+    }
+    4B int : orientation, 0=portrait, 1=landscape
+    4B int : page margin side
+    4B int : page margin top/bottom
+  }
+  
+  6*8B double : mountain fold line pattern (3-times line length + gap length in mm)
+  6*8B double : valley fold line pattern (3-times line length + gap length in mm)
+  
+  1B bool   : add outline padding
+  8B double : scale factor - unfolded parts coordinate scaling
+  if (sub_version > 4) {
+    xB STRING : author name
+    xB STRING : comment
+  }
+  4B int : 0x270f
+}
+ 
