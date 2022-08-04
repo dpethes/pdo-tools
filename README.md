@@ -32,7 +32,7 @@ Other limitations:
 
 ## Compilation
 
-You will need recent stable Lazarus (1.2) with Freepascal (2.6 or higher) to compile the sources.
+You will need recent stable Lazarus (>= 2.0) with Freepascal (>= 3.2.0) to compile the sources. Older versions may work, but are untested.
 There are 2 Lazarus project files in solution:
 
 * pdotools.lpi - pdo tools gui
@@ -43,7 +43,8 @@ To compile from command line, use lazbuild:
 
 * lazbuild --bm=Release pdotools.lpi
 
-Windows and Linux targets are supported.
+Windows and Linux targets are supported. MacOS 10.6 and higher should work as well, but it's untested.
+Libharu is requied for PDF export, either as libhpdf.dll on Windows or libharu package on Linux (static linking is used by default, unless changed in hpdf.pas - remove USE_STATIC define).
 
 
 ## TODO
