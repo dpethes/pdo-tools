@@ -37,6 +37,8 @@ type
       function GetParts: TOpfPart2dList;
       function GetPageSetup: TPageSetup;
       procedure PartsTo2D;
+      procedure RasterizationBegin;
+      procedure RasterizationEnd;
       procedure RasterizeToPngStream(const dpi: integer; dpi_min: integer = MIN_DPI);
       procedure DumpPng(const path: string);
   end;
@@ -325,6 +327,16 @@ begin
   _log.EndWriting;
 end;
 
+procedure PdoToOpf2dTransform.RasterizationBegin;
+begin
+  _tex_ctx := TFace2dRasterizer.BuildTextureTable(_pdo);
+end;
+
+procedure PdoToOpf2dTransform.RasterizationEnd;
+begin
+  TFace2dRasterizer.DestroyTextureTable(_tex_ctx);
+end;
+
 procedure PdoToOpf2dTransform.SinglePartRasterizeToPngStream(Index: PtrInt; Data: Pointer; Item: TMultiThreadProcItem);
 var
   rasterizer: TFace2dRasterizer;
@@ -361,7 +373,6 @@ var
   mpix: int64;
 begin
   _log.BeginWriting(_parts.Count);
-  _tex_ctx := TFace2dRasterizer.BuildTextureTable(_pdo);
   _dpi := dpi;
   _dpi_min := dpi_min;
 
@@ -372,7 +383,6 @@ begin
           SinglePartRasterizeToPngStream(i, _parts, nil);
   end;
 
-  TFace2dRasterizer.DestroyTextureTable(_tex_ctx);
   _log.EndWriting;
 
   mpix := 0;

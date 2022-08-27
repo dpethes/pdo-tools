@@ -207,8 +207,9 @@ begin
           rtex.pixels := tex_data;
           rtex.alloc_npot := false;
 
-          //needs resampling to npot?
+          //resample if not npot
           if (rtex.width <> tex.width) or (rtex.height <> tex.height) then begin
+              //writeln(format('npot texture %dx%d -> %dx%d', [tex.width, tex.height, rtex.width, rtex.height]));
               rtex.alloc_npot := true;
               rtex.pixels := getmem(rtex.width * rtex.height * 3);
               Resample(tex_data, rtex.pixels, tex.width, rtex.width, tex.height, rtex.height);
@@ -233,7 +234,6 @@ end;
 
 class procedure TFace2dRasterizer.DestroyTextureTable(var table: TTextureTableCtx);
 var
-  i: integer;
   rtex: TRasterizerTexture;
 begin
   for rtex in table.textures do

@@ -11,7 +11,7 @@ procedure PgmSave(const fname: string; p: pbyte; w, h: integer);
 procedure PnmSave(const fname: string; const p: pbyte; const w, h: integer);
 function clip3(const a, b, c: single): single;
 function clip3(const a, b, c: integer): integer;
-function GetMsecs: longword;
+function GetMsecs: QWord;
 procedure Swap2f(var a, b: single);
 
 implementation
@@ -95,12 +95,9 @@ begin
   else result := b;
 end;
 
-function GetMsecs: longword;
-var
-  h, m, s, ms: word;
+function GetMsecs: QWord;
 begin
-  DecodeTime (sysutils.Time(), h, m, s, ms);
-  Result := (h * 3600*1000 + m * 60*1000 + s * 1000 + ms);
+  Result := GetTickCount64;
 end;
 
 procedure Swap2f(var a, b: single);

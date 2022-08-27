@@ -41,7 +41,7 @@ var
   pdo_struct: TPdoStructure;
   opt: TVectorExportOptions;
   vec_export: TOpf2dVectorExport;
-  t: longword;
+  t: QWord;
 
   procedure TimedProc(const procName: string);
   begin
@@ -75,8 +75,13 @@ begin
   transform.PartsTo2D;
   EndTimer;
 
+  TimedProc('rasterization preparation');
+  transform.RasterizationBegin;
+  EndTimer;
+
   TimedProc('rasterizing and compressing');
   transform.RasterizeToPngStream(DefaultDpi);
+  transform.RasterizationEnd;
   EndTimer;
 
   if g_params.dumpPng then
@@ -160,7 +165,7 @@ var
   infile: string;
   pdo: TPdoParser;
   fname: string;
-  t_parsing, t_processing, t_recompress: LongWord;
+  t_parsing, t_processing, t_recompress: QWord;
 
 begin
   if Paramcount < 1 then begin
