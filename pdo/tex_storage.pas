@@ -18,6 +18,7 @@ type
       checksum: longword;  //texture checksum taken from PDO data
       decompressed: boolean;  //texture data already decompressed flag
   end;
+  PTexData = ^TTexData;
 
   { TTextureStorage }
 
@@ -25,9 +26,9 @@ type
   private
       textures: array of TTexData;
       _current_alloc_tex: TTexData;
-      _allocated: integer;
+      _allocated: longword;
 
-      procedure Decode(const id: integer);
+      procedure Decode(var tex: TTexData);
   public
       constructor Create;
       destructor Destroy; override;
@@ -36,19 +37,21 @@ type
       function Alloc(const data_size, width, height: integer): pbyte;
 
       (* Store new texture and return its ID. *)
-      function Insert(const checksum: longword): integer;
+      function Insert(const checksum: longword): longword;
 
       (* Decodes all compressed data *)
       procedure DecodePixels;
 
       (* Returns a reference to decoded pixel data for given texture ID *)
-      function GetPixels(const texture_id: integer): pbyte;
+      function GetPixels(const texture_id: longword): pbyte;
 
       (* Returns a reference to allocated memory for compressed data of given texture ID *)
-      function GetDataPointer(const texture_id: integer): pbyte;
+      function GetTexData(const texture_id: longword): TTexData;
 
       //write all textures to file
       procedure DumpTextures(const path: string);
+
+      procedure Recompress;
   end;
 
 implementation
@@ -61,16 +64,19 @@ const
 
 { TTextureStorage }
 
-procedure TTextureStorage.Decode(const id: integer);
+procedure TTextureStorage.Decode(var tex: TTexData);
 var
-  compressed: pbyte;
-  compressed_size: longword;
-  decoded_data: pbyte;
+  size, compressed_size: longword;
 begin
-  compressed := textures[id].data;
-  compressed_size := textures[id].data_size + DECODE_PADDING;  //TODO why is this padded?
-  decoded_data := textures[id].pixels;
-  LzDecodeBytes(compressed, compressed_size, decoded_data);
+  if tex.decompressed then
+      exit;
+
+  size := tex.width * tex.height * 3;
+  tex.pixels := Getmem(size);
+
+  compressed_size := tex.data_size + DECODE_PADDING;  //TODO why is this padded?
+  LzDecodeBytes(tex.data, compressed_size, tex.pixels);
+  tex.decompressed := true;
 end;
 
 constructor TTextureStorage.Create;
@@ -104,7 +110,7 @@ end;
 { Insert new texture and return its ID.
   In case of a duplicate, return previous ID
 }
-function TTextureStorage.Insert(const checksum: longword): integer;
+function TTextureStorage.Insert(const checksum: longword): longword;
 var
   idx, i: integer;
   t: TTexData;
@@ -138,13 +144,9 @@ end;
 procedure TTextureStorage.DecodePixels;
 var
   i: Integer;
-  size: integer;
 begin
   for i := 0 to Length(textures) - 1 do begin
-      size := textures[i].width * textures[i].height * 3;
-      textures[i].pixels := Getmem(size);
-      Decode(i);
-      textures[i].decompressed := true;
+      Decode(textures[i]);
   end;
   //writeln('allocated ', _allocated, ', used ', Length(textures));
 end;
@@ -185,36 +187,52 @@ begin
   end;
 end;
 
+procedure TTextureStorage.Recompress;
+var
+  size: longword;
+  encoder: TLzEncoder;
+  ms: TMemoryStream;
+  reenc_size: Int64;
+  tex: PTexData;
+  i: Integer;
+begin
+  for i := 0 to Length(textures) - 1 do begin
+      encoder := TLzEncoder.Create(7);
+      ms := TMemoryStream.Create;
+
+      tex := @textures[i];
+      size := tex^.width * tex^.height * 3;
+      encoder.EncodeBytesToStream(tex^.pixels, size, ms);
+      reenc_size := ms.Position;
+      if reenc_size < tex^.data_size then begin
+          Move(ms.Memory^, tex^.data^, reenc_size);
+          tex^.data_size := reenc_size;
+      end;
+
+      ms.Free;
+      encoder.Free;
+  end;
+end;
+
 {
   TTextureStorage.GetPixels
   Returns decoded pixels if the texture was already decoded, otherwise runs decoding first.
 }
-function TTextureStorage.GetPixels(const texture_id: integer): pbyte;
+function TTextureStorage.GetPixels(const texture_id: longword): pbyte;
 var
-  tex: TTexData;
-  size: integer;
+  tex: PTexData;
 begin
-  Assert(texture_id >= 0);
-  tex := textures[texture_id];
-  if not tex.decompressed then begin
-      size := tex.width * tex.height * 3;
-      tex.pixels := Getmem(size);
-      Decode(texture_id);
-
-      //store back
-      textures[texture_id].pixels := tex.pixels;
-      textures[texture_id].decompressed := true;
-  end;
-  Result := tex.pixels;
+  Assert(texture_id < Length(textures));
+  tex := @textures[texture_id];
+  if not tex^.decompressed then
+      Decode(tex^);
+  Result := tex^.pixels;
 end;
 
-function TTextureStorage.GetDataPointer(const texture_id: integer): pbyte;
-var
-  tex: TTexData;
+function TTextureStorage.GetTexData(const texture_id: longword): TTexData;
 begin
-  Assert(texture_id >= 0);
-  tex := textures[texture_id];
-  result := tex.data;
+  Assert(texture_id < Length(textures));
+  result := textures[texture_id];
 end;
 
 end.

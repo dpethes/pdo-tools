@@ -160,7 +160,7 @@ var
   infile: string;
   pdo: TPdoParser;
   fname: string;
-  t: LongWord;
+  t_parsing, t_processing, t_recompress: LongWord;
 
 begin
   if Paramcount < 1 then begin
@@ -176,6 +176,7 @@ begin
       writeln('  m - export each page separately');
       writeln('  p - dump rasterized textures to png');
       writeln('  t - print elapsed time for 2D export subparts');
+      writeln('  w - recompress textures to save size when resaving pdo');
       writeln('  z - compress the svg output to svgz');
       writeln('  x - dump pdo textures to pnm');
       halt;
@@ -191,7 +192,7 @@ begin
   if Paramcount > 1 then
       g_params.dumpStructure := optSet('d');
 
-  t := GetMsecs;
+  t_parsing := GetMsecs;
   pdo := TPdoParser.Create(g_params.dumpStructure);
   try
     pdo.OpenFile(infile);
@@ -203,11 +204,11 @@ begin
     end;
   end;
   pdo.Load;
-  t := GetMsecs - t;
-  writeln('parsing time: ', (t / 1000):5:2);
+  t_parsing := GetMsecs - t_parsing;
+  writeln('parsing time: ', (t_parsing / 1000):5:2);
 
   //process data
-  t := GetMsecs;
+  t_processing := GetMsecs;
   if Paramcount > 1 then begin
       fname := ExtractFilePath(infile);
       if fname <> '' then
@@ -232,13 +233,20 @@ begin
       end;
       if optSet('f') then
           ExportPatterns(pdo, fname, TvfPdf);
-      if optSet('e') then
+      if optSet('e') then begin
+          if optSet('w') then begin
+              t_recompress := GetMsecs;
+              pdo.GetStructure.tex_storage.Recompress;
+              t_recompress := GetMsecs - t_recompress;
+              writeln('texture recompress time: ', (t_recompress / 1000):5:2);
+          end;
           RewritePdo(fname + '_new.pdo', pdo);
+      end;
       if optSet('x') then
           pdo.GetStructure.tex_storage.DumpTextures(ImageDumpPath);
   end;
-  t := GetMsecs - t;
-  writeln('processing time: ', (t / 1000):5:2);
+  t_processing := GetMsecs - t_processing;
+  writeln('processing time: ', (t_processing / 1000):5:2);
 
   pdo.Free;
   writeln('done');

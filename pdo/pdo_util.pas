@@ -165,11 +165,13 @@ begin
   writeln('Materials: ', length(materials));
   for mat in materials do begin
       writeln('material: ', mat.name);
-      writeln('  texture: ', mat.has_texture);
       write('  color: ');
       for i := 0 to 3 do
           write(mat.color2d_rgba[i]:10:5);
       writeln;
+      writeln('  texture: ', mat.has_texture);
+      if mat.has_texture then
+          writeln('  texID: ', mat.texture.texture_id);
   end;
 end;
 

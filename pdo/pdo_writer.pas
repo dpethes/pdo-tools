@@ -165,15 +165,15 @@ end;
 { Write single texture }
 procedure WriteTexture(const f: TPdoStream; const t: TPdoTexture);
 var
-  data_ptr: pbyte;
+  tex: TTexData;
 begin
-  data_ptr := g_texStorage.GetDataPointer(t.texture_id);
+  tex := g_texStorage.GetTexData(t.texture_id);
 
   f.WriteDWord(t.width);
   f.WriteDWord(t.height);
-  f.WriteDWord(t.data_size + TEXTURE_DATA_WRAPPER_SIZE);
+  f.WriteDWord(tex.data_size + TEXTURE_DATA_WRAPPER_SIZE);
   f.WriteWord(t.data_header);
-  f.WriteBuffer(data_ptr^, t.data_size);
+  f.WriteBuffer(tex.data^, tex.data_size);
   f.WriteDWord(t.data_hash);
 end;
 
