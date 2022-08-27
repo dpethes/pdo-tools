@@ -19,12 +19,15 @@ const
              ('A4', 'A3', 'A2', 'A1', 'B5', 'B4', 'B3', 'B2', 'B1', 'letter', 'legal', 'other');
   PdoPageTypeOther = 11;
   FileEndMagic = $270f;  //9999
+  TEXTURE_DATA_WRAPPER_SIZE = 6;
 
 type
   TPdoTexture = record
       width,
       height: integer;
       data_size: longword;
+      data_header: word;
+      data_hash: longword;
       data: pbyte;
       texture_id: integer;
   end;

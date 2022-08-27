@@ -377,15 +377,21 @@ end;
 
 
 function TPdoParser.ReadTexture(var f:TPdoStream): TPdoTexture;
+var
+  wrapped_size: integer;
 begin
   f.ReadBytes(result.width, 4);
   f.ReadBytes(result.height, 4);
-  f.ReadBytes(result.data_size, 4);
+  f.ReadBytes(wrapped_size, 4);
 
+  result.data_size := wrapped_size - TEXTURE_DATA_WRAPPER_SIZE;
   //padded to mod4 because of bitstream 4B buffer used during decoding
   result.data := getmem(result.data_size + DECODE_PADDING);
 
+  f.ReadBytes(result.data_header, 2);
   f.ReadBytes(result.data^, result.data_size);
+  f.ReadBytes(result.data_hash, 4);
+
   result.texture_id := tex_storage.Insert(result.data, result.data_size, result.width, result.height);
 end;
 

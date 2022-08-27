@@ -64,8 +64,8 @@ var
   compressed_size: longword;
   decoded_data: pbyte;
 begin
-  compressed := textures[id].data + 2;            //skip wrapper header
-  compressed_size := textures[id].data_size - 2;
+  compressed := textures[id].data;
+  compressed_size := textures[id].data_size + 4;  //TODO this is just a padding, why?
   decoded_data := textures[id].pixels;
   LzDecodeBytes(compressed, compressed_size, decoded_data);
 end;

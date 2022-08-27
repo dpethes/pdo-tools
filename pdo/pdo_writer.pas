@@ -164,8 +164,10 @@ procedure WriteTexture(const f: TPdoStream; const t: TPdoTexture);
 begin
   f.WriteDWord(t.width);
   f.WriteDWord(t.height);
-  f.WriteDWord(t.data_size);
+  f.WriteDWord(t.data_size + TEXTURE_DATA_WRAPPER_SIZE);
+  f.WriteWord(t.data_header);
   f.WriteBuffer(t.data^, t.data_size);
+  f.WriteDWord(t.data_hash);
 end;
 
 { Write materials }
