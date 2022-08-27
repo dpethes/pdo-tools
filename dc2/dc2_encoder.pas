@@ -5,7 +5,7 @@ interface
 
 uses
   SysUtils,
-  common, dict_search, blocks;
+  dc2_common, dict_search, blocks;
 
 const
   DefaultCompLevel = 5;
@@ -45,6 +45,7 @@ type
   public
       constructor Create(const compression_level: byte; const fixed_code_only: boolean = false);
       destructor Destroy; override;
+      procedure Reset;
       //Encode given block of data
       procedure EncodeSlice(const data: pbyte; const input_size: longword; out slice: TEncodedSlice);
       //Signal the last input block
@@ -54,6 +55,12 @@ type
   end;
 
 implementation
+
+const
+  { Use fixed huffcode block if the input data is too small, as the overhead of dynamic block header
+    could kill any compression. It would be better to decide after the matches/literals are found,
+    but the difference would be just a few bytes per stream anyway. }
+  DYNAMIC_TO_FIXED_BLOCK_TRESHOLD_BYTES = 200;
 
 { TDc2Encoder }
 
@@ -72,6 +79,13 @@ begin
 
   search_results := getmem(MAX_BLOCK_SIZE * 2 * sizeof(TLiteralMatch));
 
+  Reset;
+end;
+
+procedure TDc2Encoder.Reset;
+begin
+  dict.Reset;
+  blockCoder.Reset;
   state := stStartBlock;
   block.last := false;
   Fillbyte(stats, sizeof(TStats), 0);
@@ -145,9 +159,8 @@ begin
   repeat
       case state of
       stStartBlock: begin
-          //use fixed huffcode block if the input stream is too small, the overhead of dynamic block header would kill any compression
           block.btype := BTDynamic;
-          if use_fixed_huff_only or (input_size < 200) then
+          if use_fixed_huff_only or (input_size < DYNAMIC_TO_FIXED_BLOCK_TRESHOLD_BYTES) then
               block.btype := BTFixed;
 
           blockCoder.InitNewBlock(block.btype);
@@ -201,33 +214,52 @@ end;
 }
 procedure TDc2Encoder.SearchMatches(const stream: pbyte; const size: integer);
 var
-  lm: TLiteralMatch;
   lms: PLiteralMatch;
-  match: TSearchResult;
+  match, match_lazy: TSearchResult;
   i: integer;
   literal: byte;
+  p: PByte;
 begin
   dict.NewData(stream, size);
+  p := dict.GetNewDataPtr;
   i := 0;
   lms := search_results + encoded_items;
   while i < size do begin
-      match := dict.FindMatch(stream + i, i);
-      literal := stream[i];
+      match := dict.FindMatch(p + i, i);
+      literal := p[i];
 
       if match.length >= MIN_MATCH_LENGTH then begin
+
+          //lazy matching, biases are experimental and not tuned much
+          if (clevel >= 8) and (i < size - MAX_DEFLATE_MATCH_LENGTH) then begin
+              if (match.length <= 8) then begin
+
+                  match_lazy := dict.FindMatch(p + i + 1, i + 1);
+                  if match_lazy.length > match.length + 2 then begin
+                      i += 1;
+                      lms^ := InitMatch(literal);
+                      lms += 1;
+                      blockCoder.UpdateStatsLiteral(literal);
+
+                      match := match_lazy;
+                  end;
+
+              end;
+          end;
+
           i += match.length;
-          lm := InitMatch(match);
+          lms^ := InitMatch(match);
           blockCoder.UpdateStatsMatch(match.length, match.distance);
       end
       else begin
           i += 1;
-          lm := InitMatch(literal);
+          lms^ := InitMatch(literal);
           blockCoder.UpdateStatsLiteral(literal);
       end;
 
-      lms^ := lm;
       lms += 1;
   end;
+  dict.DoneData;
   encoded_items := lms - search_results;
 end;
 

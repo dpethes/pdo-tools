@@ -21,7 +21,7 @@ type
   public
     procedure SetTrees(const bitstream: TBitstreamWriter; const length_tree, distance_tree: PVlcCode);
     procedure WriteMatch (const len, dist: longword);
-    procedure WriteLiteral (const c: byte);
+    procedure WriteLiteral(const c: integer); inline;
     procedure WriteBlockEnd ();
   end;
 
@@ -47,12 +47,13 @@ type
     literal_dectable, distance_dectable: TDecodeLookupTables;
   public
     procedure SetTables(const bitreader: TBitstreamReader; const literal_table, distance_table: TDecodeLookupTables);
-    procedure ReadCodePair (out length, distance: word);
+    function ReadCode: integer; inline;
+    procedure ReadDist(code: integer; out length, distance: word);
   end;
 
 
 function Length2code (const len:  longword): longword;
-function Distance2code(const dist: longword): longword;
+function Distance2code(const dist: integer): longword;
 
 function vlc_ReadCode(const bs: TBitstreamReader; const dectable: TDecodeLookupTables): integer;
 function InitDecodeLut(const code_lengths: pbyte; const count: integer): TDecodeLookupTables;
@@ -64,7 +65,7 @@ implementation
 { Length2code
   Map match length value to length code for huff encoding.
 }
-function Length2code (const len: longword): longword;
+function Length2code (const len: longword): longword; inline;
 const
   table: array[byte] of byte = (
   1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 13, 13, 14, 14,
@@ -104,9 +105,9 @@ end;
 { Distance2code
   Map distance value to distance code for huff encoding.
 }
-function Distance2code(const dist: longword): longword;
+function Distance2code(const dist: integer): longword; inline;
 const
-  table_512: array [0..511] of byte = (
+  table_384: array [0..383] of byte = (
   0, 1, 2, 3, 4, 4, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9,
   9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
   11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12,
@@ -125,16 +126,10 @@ const
   16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
   16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
   16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-  16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17,
-  17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,
-  17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,
-  17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,
-  17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,
-  17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,
-  17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,
-  17, 17, 17, 17
+  16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16
   );
-  table_128: array[2..127] of byte = (
+  table_32768: array[0..127] of byte = (
+  0,  17,
   18, 19, 20, 20, 21, 21, 22, 22, 22, 22, 23, 23, 23, 23, 24, 24, 24, 24, 24, 24,
   24, 24, 25, 25, 25, 25, 25, 25, 25, 25, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
   26, 26, 26, 26, 26, 26, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
@@ -144,10 +139,10 @@ const
   29, 29, 29, 29, 29, 29
   );
 begin
-  if dist <= 512 then
-      result := table_512[dist - 1]
+  if dist <= 384 then
+      result := table_384[dist - 1]
   else begin
-      result := table_128[(dist - 1) shr 8];
+      result := table_32768[(dist - 1) shr 8];
   end;
 end;
 
@@ -177,33 +172,33 @@ end;
 
 procedure TVlcWriter.WriteMatch(const len, dist: longword);
 var
-  code, bits: longword;
+  code, bits: integer;
 begin
   //length
   code := Length2code(len);
   bs.Write(len_tree[code].bits, len_tree[code].code_len);
   if (code >= 265) and (code < 285) then begin  //extra bits
       bits := 5 - (284 - code) div 4;
-      bs.Write(len - 3, bits);
+      bs.WriteSafe(len - 3, bits);
   end;
 
   //offset / distance
   code := Distance2code(dist);
   bs.Write(dist_tree[code].bits, dist_tree[code].code_len);
+  bits := (code >> 1) - 1;
   if code >= 4 then begin
-      bits := code div 2 - 1;
-      bs.Write(dist - 1, bits);
+      bs.WriteSafe(dist - 1, bits);
   end;
 end;
 
-procedure TVlcWriter.WriteLiteral(const c: byte);
+procedure TVlcWriter.WriteLiteral(const c: integer); inline;
 begin
   bs.Write(len_tree[c].bits, len_tree[c].code_len);
 end;
 
-procedure TVlcWriter.WriteBlockEnd;
+procedure TVlcWriter.WriteBlockEnd();
 begin
-  bs.Write(len_tree[END_OF_BLOCK_CODE].bits, len_tree[END_OF_BLOCK_CODE].code_len);
+  WriteLiteral(END_OF_BLOCK_CODE)
 end;
 
 { vlc_ReadCode
@@ -247,14 +242,13 @@ end;
 }
 function vlc_ReadCode(const bs: TBitstreamReader; const dectable: TDecodeLookupTables): integer;
 var
-  bits: integer;
-  sb: TSymbolBits;
+  bits: PtrInt;
 begin
   bits := bs.Show9u();  //same as bs.Show(TAB0_BITS) but inlined and slightly faster
-  sb := dectable.codes_t0[bits];
-  result := sb.symbol;
-  bs.Skipu(sb.nbits);
-  if (sb.nbits = 0) then begin
+  result := dectable.codes_t0[bits].symbol;
+  bits := dectable.codes_t0[bits].nbits;
+  bs.Skipu(bits);
+  if (bits = 0) then begin
       result := vlc_ReadCodeSlow(bs, dectable.canon_table);
       bs.Refill;
   end;
@@ -316,42 +310,38 @@ begin
   distance_dectable := distance_table;
 end;
 
-procedure TVlcReader.ReadCodePair(out length, distance: word);
+{ ReadCode + ReadDist
+  There are at most 7 bits in buffer after refill, which gives 32-7=25 bits for unchecked reads.
+  Here we do 9 bits lookup + 5 bits extra + 9 bits lookup = 23 bits at most;
+  codes that cannot be decoded from lookup table cause buffer refills in vlc_ReadCode.
+}
+function TVlcReader.ReadCode: integer;
+begin
+  bs.Refill;
+  result := vlc_ReadCode(bs, literal_dectable);
+end;
+
+{ ReadDist
+  Code must be a valid length code read by ReadCode
+}
+procedure TVlcReader.ReadDist(code: integer; out length, distance: word);
 const
-  LITERAL_EXTRA_BITS: array[257..285] of byte = (
+  LENGTH_EXTRA_BITS: array[257..285] of byte = (
   0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0
   );
 var
-  code, extra_bits: longword;
+  extra_bits: longword;
 begin
-  length := 1;
+  length := Code2length(code);
+  extra_bits := LENGTH_EXTRA_BITS[code];
+  if extra_bits > 0 then begin
+      length += bs.Readu(extra_bits);
+  end;
 
-  //There are at most 7 bits in buffer after refill, which gives 32-7=25 bits for unchecked reads.
-  //Here we do 9 bits lookup + 5 bits extra + 9 bits lookup = 23 bits at most;
-  //codes that cannot be decoded from lookup table cause buffer refills in vlc_ReadCode.
-  bs.Refill;
-  code := vlc_ReadCode(bs, literal_dectable);
-
-  //decode literals, length / distance, end of block
-  if code < 256 then begin
-      distance := code;
-  end
-  else if code > 256 then begin
-      length := Code2length(code);
-      extra_bits := LITERAL_EXTRA_BITS[code];
-      if extra_bits > 0 then begin
-          length += bs.Readu(extra_bits);
-      end;
-
-      code := vlc_ReadCode(bs, distance_dectable);
-      distance := Code2distance(code);
-      if code >= 4 then begin
-          distance += bs.Read(code >> 1 - 1);  //bitstream refill check needed
-      end;
-  end
-  else begin
-      length := END_OF_BLOCK;
-      distance := 0;
+  code := vlc_ReadCode(bs, distance_dectable);
+  distance := Code2distance(code);
+  if code >= 4 then begin
+      distance += bs.Read(code >> 1 - 1);  //bitstream refill check needed, can read up to 13 bits
   end;
 end;
 

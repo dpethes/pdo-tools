@@ -15,14 +15,15 @@ end;
 
 TBitstreamWriter = class
   private
-    buffer: plongword;
     cur: plongword;
     mask: longword;
+    buffer: plongword;
     closed: boolean;
 
   public
     constructor Create(const memory_buffer: pbyte);
     destructor Destroy; override;
+    procedure Reset;
 
     procedure Close;
     function IsByteAligned: boolean;
@@ -33,6 +34,7 @@ TBitstreamWriter = class
     function GetDataStart: pbyte;
 
     procedure Write(const bit: integer);
+    procedure WriteSafe(const bits, length: longword);
     procedure Write(const bits, length: longword);  //write multiple bits, lsb first
 
     function GetState: TBitstreamBufferState;
@@ -63,11 +65,11 @@ TBitstreamReader = class
 
     //U functions need explicit Refill calls
     procedure Refill;
-    function  ReadU: longword;  {$ifdef bs_inline}inline;{$endif}
-    function  ReadU(count: longword): longword;
+    function  ReadU: longword;                   {$ifdef bs_inline}inline;{$endif}
+    function  ReadU(count: longword): longword;  {$ifdef bs_inline}inline;{$endif}
     function  ShowU(const count: longword): longword; {$ifdef bs_inline}inline;{$endif}
-    function  Show9U: longword; {$ifdef bs_inline}inline;{$endif}
-    procedure SkipU(const count: longword); {$ifdef bs_inline}inline;{$endif}
+    function  Show9U: longword;                  {$ifdef bs_inline}inline;{$endif}
+    procedure SkipU(const count: longword);      {$ifdef bs_inline}inline;{$endif}
 
     function  ReadInverse(bit_count: longword): longword;
 
@@ -106,6 +108,11 @@ end;
 constructor TBitstreamWriter.Create(const memory_buffer: pbyte);
 begin
   buffer := plongword (memory_buffer);
+  Reset;
+end;
+
+procedure TBitstreamWriter.Reset;
+begin
   cur  := buffer;
   cur^ := 0;
   mask := 0;
@@ -167,15 +174,13 @@ begin
   end;
 end;
 
-procedure TBitstreamWriter.Write(const bits, length: longword);
+procedure TBitstreamWriter.WriteSafe(const bits, length: longword);
 var
   bits_: longword;
 begin
   Assert(length <= 32, 'bit_count over 32');
 
-  //clear unused bits
-  bits_ := bits and ($ffffffff shr (32 - length));
-
+  bits_ := bits and ($ffffffff shr (32 - length));  //clear unused bits
   cur^ := cur^ or (bits_ shl mask);
   mask += length;
   if mask >= 32 then begin
@@ -185,6 +190,23 @@ begin
 
       if mask > 0 then
           cur^ := bits_ shr (length - mask);
+  end;
+end;
+
+//assumes that unused bits not covered by length are not set
+procedure TBitstreamWriter.Write(const bits, length: longword);
+begin
+  Assert(length <= 32, 'bit_count over 32');
+
+  cur^ := cur^ or (bits shl mask);
+  mask += length;
+  if mask >= 32 then begin
+      mask -= 32;
+      cur += 1;
+      cur^ := 0;
+
+      if mask > 0 then
+          cur^ := bits shr (length - mask);
   end;
 end;
 

@@ -197,7 +197,7 @@ var
   i: Integer;
 begin
   for i := 0 to Length(textures) - 1 do begin
-      encoder := TLzEncoder.Create(7);
+      encoder := TLzEncoder.Create(9);
       ms := TMemoryStream.Create;
 
       tex := @textures[i];

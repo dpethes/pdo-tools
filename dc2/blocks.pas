@@ -5,7 +5,7 @@ interface
 
 uses
   sysutils,
-  common, bitstream, vlc, huffcoding;
+  dc2_common, bitstream, vlc, huffcoding;
 
 const
   MIN_MATCH_LENGTH = 3;
@@ -43,11 +43,12 @@ type
   public
     constructor Create(const output_buffer: pbyte);
     destructor Destroy; override;
+    procedure Reset;
 
     procedure InitNewBlock(const block_type: TBlockTypeEnum);
     procedure SetLast;
-    procedure UpdateStatsMatch(const len, dist: longword); inline;
-    procedure UpdateStatsLiteral(const literal: byte); inline;
+    procedure UpdateStatsMatch(const len, dist: longword);
+    procedure UpdateStatsLiteral(const literal: byte);
 
     procedure WriteBlock(const rawdata: pbyte; const rawsize: integer;
       const search_results: PLiteralMatch; const size: integer; const keep_buffer: boolean = false);
@@ -60,8 +61,8 @@ type
   TBlockContext = record
       btype: TBlockTypeEnum;
       size:  integer;
-      unfinished: boolean;
-      last:  boolean;       //last block flag
+      in_progress: boolean;
+      is_last:  boolean;
   end;
 
   { TBlockReader }
@@ -100,40 +101,6 @@ type
       end;
       code_lengths: array[0..MAX_CODE_LENGTHS-1] of byte;
   end;
-
-{
-  Build length-limited huffman code tree.
-  Length is limited by reducing the code occurence's statistics.
-  Less accuracy means that the differences between code lengths are reduced, too.
-  This is somewhat suboptimal.
-
-  Distance trees are special, because there are cases where they contain only one used symbol.
-}
-procedure build_limited_tree(var tree: THuffTree; limit, size: word; const for_distance: boolean = false);
-var
-  i: integer;
-  tree_ok: boolean;
-  freq_limit: integer;
-begin
-  freq_limit := 256*2;
-  repeat
-      if for_distance then
-          huff_build_distance_tree(tree, freq_limit)
-      else
-          huff_build_tree(tree, freq_limit);
-      tree_ok := true;
-      for i := 0 to size - 1 do
-          if tree.codes[i].code_len > limit then begin
-              tree_ok := false;
-              freq_limit := freq_limit shr 1;
-              break;
-          end;
-  until tree_ok;
-  //reverse bits for faster bitwriting
-  for i := 0 to size - 1 do begin
-      tree.codes[i].bits := SwapBits(tree.codes[i].bits, tree.codes[i].code_len);
-  end;
-end;
 
 {
   WriteCodeLengths
@@ -229,7 +196,7 @@ begin
       value := src[i];
       //zero runs
       if value = 0 then begin
-          max_lookahead := 137;
+          max_lookahead := 138;
           if size - i < max_lookahead then
               max_lookahead := size - i;
 
@@ -463,7 +430,6 @@ end;
 constructor TBlockWriter.Create(const output_buffer: pbyte);
 begin
   bitWriter := TBitstreamWriter.Create(output_buffer);
-  bs_cache := bitWriter.GetState;
 
   literal_match_stats := GetMem(LITERAL_MATCH_ELEMENTS * sizeof(integer));
   distance_stats := Getmem(DISTANCE_ELEMENTS * sizeof(integer));
@@ -472,6 +438,13 @@ begin
   distance_codes := GetMem(DISTANCE_ELEMENTS * sizeof(TVlcCode));
 
   huff_memory := huff_alloc();
+  Reset;
+end;
+
+procedure TBlockWriter.Reset;
+begin
+  bitWriter.Reset;
+  bs_cache := bitWriter.GetState;
 end;
 
 destructor TBlockWriter.Destroy;
@@ -660,7 +633,7 @@ var
   block: TBlockContext;
   t: integer;
 begin
-  block.last  := bs.Read() = 1;
+  block.is_last  := bs.Read() = 1;
   block.btype := TBlockTypeEnum( bs.Read(2) );
   _block_type := block.btype;
 
@@ -669,7 +642,7 @@ begin
           while not bs.IsByteAligned() do
               bs.Read();
           block.size := bs.Read(16);
-          t := not integer(bs.Read(16));
+          t := bs.Read(16) xor $ffff;
           Assert(block.size = t, 'blk size mismatch');
       end;
       BTDynamic: begin

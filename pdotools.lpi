@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
   <ProjectOptions>
-    <Version Value="10"/>
+    <Version Value="12"/>
     <PathDelim Value="\"/>
     <General>
       <Flags>
         <MainUnitHasUsesSectionForAllUnits Value="False"/>
+        <CompatibilityMode Value="True"/>
       </Flags>
       <SessionStorage Value="InProjectDir"/>
-      <MainUnit Value="0"/>
       <Title Value="Pdo tools"/>
       <ResourceType Value="res"/>
       <UseXPManifest Value="True"/>
@@ -69,13 +69,12 @@
     </BuildModes>
     <PublishOptions>
       <Version Value="2"/>
-      <IncludeFileFilter Value="*.(pas|pp|inc|lfm|lpr|lrs|lpi|lpk|sh|xml)"/>
-      <ExcludeFileFilter Value="*.(bak|ppu|o|so);*~;backup"/>
     </PublishOptions>
     <RunParams>
-      <local>
-        <FormatVersion Value="1"/>
-      </local>
+      <FormatVersion Value="2"/>
+      <Modes Count="1">
+        <Mode0 Name="default"/>
+      </Modes>
     </RunParams>
     <RequiredPackages Count="2">
       <Item1>
@@ -146,91 +145,91 @@
         <IsPartOfProject Value="True"/>
       </Unit13>
       <Unit14>
-        <Filename Value="dc2\common.pas"/>
+        <Filename Value="dc2\dc2_decoder.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit14>
       <Unit15>
-        <Filename Value="dc2\dc2_decoder.pas"/>
+        <Filename Value="dc2\dc2_encoder.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit15>
       <Unit16>
-        <Filename Value="dc2\dc2_encoder.pas"/>
+        <Filename Value="dc2\dict_search.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit16>
       <Unit17>
-        <Filename Value="dc2\dict_search.pas"/>
+        <Filename Value="dc2\gzip_format.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit17>
       <Unit18>
-        <Filename Value="dc2\gzip_format.pas"/>
+        <Filename Value="dc2\huffcoding.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit18>
       <Unit19>
-        <Filename Value="dc2\huffcoding.pas"/>
+        <Filename Value="dc2\slide_buffer.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit19>
       <Unit20>
-        <Filename Value="dc2\slide_buffer.pas"/>
+        <Filename Value="dc2\vlc.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit20>
       <Unit21>
-        <Filename Value="dc2\vlc.pas"/>
+        <Filename Value="pdfwriter\pdf_writer.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit21>
       <Unit22>
-        <Filename Value="pdfwriter\pdf_writer.pas"/>
+        <Filename Value="pdfwriter\hpdf.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit22>
       <Unit23>
-        <Filename Value="pdfwriter\hpdf.pas"/>
+        <Filename Value="pdfwriter\hpdf_types.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit23>
       <Unit24>
-        <Filename Value="pdfwriter\hpdf_types.pas"/>
+        <Filename Value="pdfwriter\hpdf_consts.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit24>
       <Unit25>
-        <Filename Value="pdfwriter\hpdf_consts.pas"/>
+        <Filename Value="pdo\part_outliner.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit25>
       <Unit26>
-        <Filename Value="pdo\part_outliner.pas"/>
+        <Filename Value="pdo\tabs.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit26>
       <Unit27>
-        <Filename Value="pdo\tabs.pas"/>
+        <Filename Value="pdo\pdo_util.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit27>
       <Unit28>
-        <Filename Value="pdo\pdo_util.pas"/>
+        <Filename Value="pdfwriter\vector_writer.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit28>
       <Unit29>
-        <Filename Value="pdfwriter\vector_writer.pas"/>
+        <Filename Value="pdfwriter\svg_writer.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit29>
       <Unit30>
-        <Filename Value="pdfwriter\svg_writer.pas"/>
+        <Filename Value="dc2\dc2_simple_api.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit30>
       <Unit31>
-        <Filename Value="dc2\dc2_simple_api.pas"/>
+        <Filename Value="rasterizer\face2d_rasterizer.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit31>
       <Unit32>
-        <Filename Value="rasterizer\face2d_rasterizer.pas"/>
+        <Filename Value="pdo\pdo_writer.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit32>
       <Unit33>
-        <Filename Value="pdo\pdo_writer.pas"/>
+        <Filename Value="pdo\opf2vector.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit33>
       <Unit34>
-        <Filename Value="pdo\opf2vector.pas"/>
+        <Filename Value="utils\glist.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit34>
       <Unit35>
-        <Filename Value="utils\glist.pas"/>
+        <Filename Value="dc2\dc2_common.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit35>
     </Units>

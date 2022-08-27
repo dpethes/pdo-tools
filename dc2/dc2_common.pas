@@ -1,4 +1,4 @@
-unit common;
+unit dc2_common; //r204
 {$mode objfpc}{$H+}
 
 interface
@@ -7,7 +7,7 @@ const
   MAX_BLOCK_SIZE = 32 * 1024;
 
 type
-  TBlockTypeEnum = (BTRaw := 0, BTFixed, BTDynamic, BTError);
+  TBlockTypeEnum = (BTRaw = 0, BTFixed, BTDynamic, BTError);
 
   //encoding statistics
   TStats = record

@@ -5,7 +5,7 @@ interface
 
 uses
   sysutils,
-  common, bitstream, blocks, vlc;
+  dc2_common, bitstream, blocks, vlc;
 
 type
   TDecodedSlice = record
@@ -28,7 +28,7 @@ type
 
     stream_start: boolean;             //set after decoder initialization
     stream_end: boolean;               //must be set if last data from the stream is passed to DecodeSlice
-    blocks_end: boolean;               //set if end of last block is reached
+    decoding_finished: boolean;        //set after decoding the last block
     is_new_data: boolean;              //expect new data passed to DecodeSlice
     previous_bytes_count: integer;     //number of bytes decoded in previous DecodeSlice() call
 
@@ -50,7 +50,7 @@ type
 implementation
 
 const
-  PAD_BITS = 2048;  //should be enough to store the whole dynamic code header
+  INPUT_PAD_BYTES = 1024;  //must be enough to store the whole dynamic code header
   CHECK_PASSES = 32;  //how often should the decoding loop buffers be checked
   OUT_BUFFER_PAD_BYTES = CHECK_PASSES * 258;  //(# of passes between checks) * (max Deflate match length)
   OUT_BUFFER_SIZE = MAX_BLOCK_SIZE + OUT_BUFFER_PAD_BYTES;
@@ -71,11 +71,11 @@ begin
 
   blockDecoder := TBlockReader.Create;
 
-  block.last := false;
-  block.unfinished := false;
+  block.is_last := false;
+  block.in_progress := false;
   stream_start := true;
   stream_end := false;
-  blocks_end := false;
+  decoding_finished := false;
   Fillbyte(stats, sizeof(TStats), 0);
 end;
 
@@ -100,7 +100,7 @@ var
   cache: TBitstreamBufferState;
 begin
   slice.size := 0;
-  if blocks_end then exit;
+  if decoding_finished then exit;
 
   //open stream or just add new data
   if stream_start then begin
@@ -129,7 +129,7 @@ begin
   end;
 
   //do we still need to process some data?
-  if (not stream_end) and (bitReader.GetPosition() + PAD_BITS >= bs_byte_count) then begin
+  if (not stream_end) and (bitReader.GetPosition() + INPUT_PAD_BYTES >= bs_byte_count) then begin
       is_new_data := true;
       exit;
   end;
@@ -202,12 +202,13 @@ end;
 function TDc2Decoder.DecodeBlock: TDecodedSlice;
 var
   i: longword;
+  code: integer;
   offs, mlen: word;
   dst: pbyte;
   stream_check: integer;
   vlc: TVlcReader;
 begin  
-  if not block.unfinished then begin
+  if not block.in_progress then begin
       block := blockDecoder.ReadBlockHeader(bitReader);
       stats.blocks[block.btype] += 1;
   end;
@@ -226,9 +227,9 @@ begin
                   break;
           end;
 
-          block.unfinished := block.size > 0;
-          if block.last and not block.unfinished then
-              blocks_end := true;
+          block.in_progress := block.size > 0;
+          if block.is_last and not block.in_progress then
+              decoding_finished := true;
       end;
 
       //inflate block
@@ -237,47 +238,52 @@ begin
           stream_check := CHECK_PASSES;
           dst := output_buffer;
           while true do begin
-              vlc.ReadCodePair(mlen, offs);
-
-              //literal
-              if mlen = 1 then begin
-                  dst^ := byte( offs );
+              code := vlc.ReadCode;
+              if code < 256 then begin
+                  //literal
+                  dst^ := byte( code );
+                  dst += 1;
               end
-              //match, no loop
-              else if offs >= mlen then begin
-                  copy_block(dst - offs, dst, mlen);
-              end
-              //match with loop
-              else if mlen <> END_OF_BLOCK then begin
-                  copy_overlap(dst - offs, dst, mlen);
-              end
-              else begin
-                  block.unfinished := false;
-                  if block.last then blocks_end := true;
+              else if code = 256 then begin
+                  //end of block
+                  block.in_progress := false;
+                  decoding_finished := block.is_last;
 
                   { if we decoded only the EOB symbol in this run, we have to run decoding on the next block,
                     because zero-size slice means there wasn't any more data to decode,
                     which is simply not true if we got to block decoding
                   }
-                  if (i = 0) and not block.last then begin
+                  i := dst - output_buffer;
+                  if (i = 0) and not block.is_last then begin
                       result := DecodeBlock();
                       exit;
                   end;
                   break;
+              end
+              else begin
+                  //match
+                  vlc.ReadDist(code, mlen, offs);
+                  if offs >= mlen then begin
+                      copy_block(dst - offs, dst, mlen);
+                  end
+                  //match with loop
+                  else begin
+                      copy_overlap(dst - offs, dst, mlen);
+                  end;
+                  dst += mlen;
               end;
-              i += mlen;
-              dst += mlen;
 
               stream_check -= 1;
               if stream_check = 0 then begin
+                  i := dst - output_buffer;
                   //check if there's enough bits to decode in current buffer
                   if (not stream_end) and (bitReader.GetPosition() + IN_VLC_PAD_BYTES >= bs_byte_count) then begin
-                      block.unfinished := true;
+                      block.in_progress := true;
                       break;
                   end;
                   //check if there's enough space to output decoded data
                   if i + OUT_BUFFER_PAD_BYTES - OUT_BUFFER_SIZE > 0 then begin
-                      block.unfinished := true;
+                      block.in_progress := true;
                       break;
                   end;
                   stream_check := CHECK_PASSES;
@@ -288,7 +294,7 @@ begin
       //block type error
       BTError: begin
           writeln( stderr, 'error in input stream: reserved block type used' );
-          blocks_end := true;
+          decoding_finished := true;
           halt();
       end;
   end;
