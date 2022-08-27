@@ -10,10 +10,11 @@ uses
 
 type
   TRasterizerTexture = record
-      width, height: integer;
-      size: integer;
       pixels: pbyte;
       tex: TTexture2D;
+      width, height: integer;
+      size: integer;
+      alloc_npot: boolean;
   end;
 
   TTextureTableCtx = record
@@ -55,6 +56,120 @@ const
   MAX_IMAGE_WIDTH = 2048;
 
 
+procedure Resample(psrc, pdest: pbyte; wsrc, wdst, hsrc, hdst: integer);
+var
+  dx, dy: single;
+  weight_left, weight_right, weight_top, weight_bottom: single;
+  coord_x, coord_y: single;
+  i: integer;
+  stride_src, stride_dst, stride_temp: integer;
+  a, b, c, x, y, htemp: integer;
+  pa, pb: pbyte;
+  ptemp: pbyte;
+begin
+  stride_src := wsrc * 3;
+  stride_dst := wdst * 3;
+
+  stride_temp := stride_dst;
+  htemp := hsrc;
+  ptemp := getmem(htemp * stride_temp);
+
+  //horizontal pass
+  dx := wsrc / (wdst + 1);
+  for y := 0 to hsrc - 1 do begin
+
+      coord_x := 0;
+      pa := psrc + y * stride_src;
+      pb := pa + 3;
+
+      for x := 0 to wdst - 2 do begin
+          coord_x += dx;
+          i := trunc(coord_x);
+          weight_right := coord_x - i;
+          weight_left := 1 - weight_right;
+
+          a := pa[i * 3];
+          b := pb[i * 3];
+          c := trunc(a * weight_left + b * weight_right);
+          ptemp[y * stride_dst + x * 3 + 0] := c;
+
+          a := pa[i * 3 + 1];
+          b := pb[i * 3 + 1];
+          c := trunc(a * weight_left + b * weight_right);
+          ptemp[y * stride_dst + x * 3 + 1] := c;
+
+          a := pa[i * 3 + 2];
+          b := pb[i * 3 + 2];
+          c := trunc(a * weight_left + b * weight_right);
+          ptemp[y * stride_dst + x * 3 + 2] := c;
+      end;
+
+      //right edge - copy pixels from source
+      x := wdst - 1;
+      pa := psrc + y * stride_src + stride_src - 3;
+      c := pa[0];
+      ptemp[y * stride_dst + x * 3 + 0] := c;
+      c := pa[1];
+      ptemp[y * stride_dst + x * 3 + 1] := c;
+      c := pa[2];
+      ptemp[y * stride_dst + x * 3 + 2] := c;
+  end;
+
+  //vertical pass
+  dy := hsrc / hdst;
+  coord_y := 0;
+  for y := 0 to hdst - 2 do begin
+
+      coord_y += dy;
+      i := trunc(coord_y);
+      weight_bottom := coord_y - i;
+      weight_top := 1 - weight_bottom;
+
+      pa := ptemp + i * stride_temp;
+      pb := pa + stride_dst;
+      if pb > ptemp + (htemp - 1) * stride_temp then
+          pb := pa;
+
+      for x := 0 to wdst - 1 do begin
+          a := pa[x * 3];
+          b := pb[x * 3];
+          c := trunc(a * weight_top + b * weight_bottom);
+          pdest[y * stride_dst + x * 3 + 0] := c;
+
+          a := pa[x * 3 + 1];
+          b := pb[x * 3 + 1];
+          c := trunc(a * weight_top + b * weight_bottom);
+          pdest[y * stride_dst + x * 3 + 1] := c;
+
+          a := pa[x * 3 + 2];
+          b := pb[x * 3 + 2];
+          c := trunc(a * weight_top + b * weight_bottom);
+          pdest[y * stride_dst + x * 3 + 2] := c;
+      end;
+  end;
+
+  //bottom edge - copy pixels from source
+  move((ptemp + (htemp - 1) * stride_temp)^,
+       (pdest + (hdst - 1) * stride_dst)^,
+        stride_temp);
+
+  freemem(ptemp);
+end;
+
+
+function NextPot(n: word): word;
+var
+  idx_set: Cardinal;
+begin
+  if PopCnt(n) > 1 then begin
+      idx_set := BsrWord(n);
+      result := 1 shl (idx_set + 1);
+  end else
+      result := n;
+end;
+
+
+
 { Pack 32bit RGBA source to 24bit RGB destination.
 }
 procedure PackRgbaToRgb(src, dst: pbyte; const size: integer);
@@ -77,6 +192,7 @@ var
   num_materials: integer;
   pixcolor: TPixelRGBA;
   tex_data: pbyte;
+  rtex: TRasterizerTexture;
 begin
   num_materials := length(pdo.materials);
   SetLength(result.textures, num_materials);
@@ -86,16 +202,26 @@ begin
       if pdo.materials[i].has_texture then begin
           tex := pdo.materials[i].texture;
           tex_data := pdo.tex_storage.GetPixels(tex.texture_id);
-          result.textures[i].width  := tex.width;
-          result.textures[i].height := tex.height;
-          result.textures[i].pixels := tex_data;
-          result.textures[i].tex := TTexture2D.Create(tex_data, tex.width, tex.height);
+          rtex.width  := NextPot(tex.width);
+          rtex.height := NextPot(tex.height);
+          rtex.pixels := tex_data;
+          rtex.alloc_npot := false;
+
+          //needs resampling to npot?
+          if (rtex.width <> tex.width) or (rtex.height <> tex.height) then begin
+              rtex.alloc_npot := true;
+              rtex.pixels := getmem(rtex.width * rtex.height * 3);
+              Resample(tex_data, rtex.pixels, tex.width, rtex.width, tex.height, rtex.height);
+          end;
+
+          rtex.tex := TTexture2D.Create(rtex.pixels, rtex.width, rtex.height);
       end
       else begin
-          result.textures[i].width := 0;
-          result.textures[i].height := 0;
-          result.textures[i].pixels := nil;
+          rtex.width := 0;
+          rtex.height := 0;
+          rtex.pixels := nil;
       end;
+      result.textures[i] := rtex;
       pixcolor.r := round(pdo.materials[i].color2d_rgba[0] * 255);
       pixcolor.g := round(pdo.materials[i].color2d_rgba[1] * 255);
       pixcolor.b := round(pdo.materials[i].color2d_rgba[2] * 255);
@@ -108,10 +234,13 @@ end;
 class procedure TFace2dRasterizer.DestroyTextureTable(var table: TTextureTableCtx);
 var
   i: integer;
+  rtex: TRasterizerTexture;
 begin
-  for i := 0 to Length(table.textures) - 1 do
-      if table.textures[i].pixels <> nil then begin
-          table.textures[i].tex.Free;
+  for rtex in table.textures do
+      if rtex.pixels <> nil then begin
+          rtex.tex.Free;
+          if rtex.alloc_npot then
+              freemem(rtex.pixels);
       end;
   table.textures := nil;
   table.colors := nil;

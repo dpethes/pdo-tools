@@ -1,5 +1,9 @@
 ## Changelog
 
+### v0.11 ()
+
+* fix rendering of files with textures that have non-power of two dimensions
+
 ### v0.10 (4.8.2022)
 
 * improved support for Pepakura version 4 and higher
