@@ -227,6 +227,7 @@ var
   unknown_int: integer;
   i: word;
   junk: array[0..15] of byte;
+  peeksize: Byte;
 begin
   header.string_shift := 0;
   ReadMajorVersion(fpdo);
@@ -249,6 +250,17 @@ begin
       fpdo.ReadBytes(header.show_startup_notes, 1);
       fpdo.ReadBytes(header.password_flag, 1);
   end;
+
+  { check for dodgy files:
+    - old v2 format file imported into Pepakura designer 4 (which messed up the objects' names), then saved as newer format
+    - I haven't seen this kind of file in the wild, so just assert for now
+  }
+  peeksize := pbyte(fpdo.Memory)[fpdo.Position];
+  Assert((fpdo.multiByteC and (peeksize = 66)) or (not fpdo.multiByteC and (peeksize = 33)), 'header string error');
+  //fix for testing
+  //if fpdo.multiByteC and (peeksize = 33) then
+  //    fpdo.multiByteC := false;
+
   header.key := fpdo.ReadShiftedString;
 
   if header.version = PDO_V6 then begin
@@ -321,7 +333,6 @@ end;
 function TPdoParser.ReadObject(var f:TPdoStream): TPdoObject;
 var
   i, numvertices, numfaces, numedges: integer;
-  flag: byte;
 begin
   result.name := f.ReadShiftedString;
   f.ReadBytes(result.visible, 1);
