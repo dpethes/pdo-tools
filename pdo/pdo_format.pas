@@ -71,9 +71,6 @@ type
 {**************************************************************************************************}
 implementation
 
-const
-  DECODE_PADDING = 4;
-
 { TPdoStream }
 
 constructor TPdoStream.Create;
@@ -144,12 +141,7 @@ begin
   inherited Destroy;
 
   //free texture and image data
-  for i := 0 to Length(materials) - 1 do
-      if materials[i].has_texture then
-          Freemem(materials[i].texture.data);
   materials := nil;
-  for i := 0 to Length(images) - 1 do
-      Freemem(images[i].texture.data);
   images := nil;
   tex_storage.Free;
 
@@ -379,20 +371,20 @@ end;
 function TPdoParser.ReadTexture(var f:TPdoStream): TPdoTexture;
 var
   wrapped_size: integer;
+  data_ptr: pbyte;
 begin
   f.ReadBytes(result.width, 4);
   f.ReadBytes(result.height, 4);
   f.ReadBytes(wrapped_size, 4);
 
   result.data_size := wrapped_size - TEXTURE_DATA_WRAPPER_SIZE;
-  //padded to mod4 because of bitstream 4B buffer used during decoding
-  result.data := getmem(result.data_size + DECODE_PADDING);
+  data_ptr := tex_storage.Alloc(result.data_size, result.width, result.height);
 
   f.ReadBytes(result.data_header, 2);
-  f.ReadBytes(result.data^, result.data_size);
+  f.ReadBytes(data_ptr^, result.data_size);
   f.ReadBytes(result.data_hash, 4);
 
-  result.texture_id := tex_storage.Insert(result.data, result.data_size, result.width, result.height);
+  result.texture_id := tex_storage.Insert(result.data_hash);
 end;
 
 
@@ -417,7 +409,6 @@ begin
   if result.has_texture then
       result.texture := ReadTexture(f)
   else begin
-      result.texture.data := nil;
       result.texture.data_size := 0;
       result.texture.texture_id := -1;
   end;

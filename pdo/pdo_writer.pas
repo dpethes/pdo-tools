@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils,
-  pdo_common;
+  pdo_common, tex_storage;
 
 type
 
@@ -33,6 +33,9 @@ procedure WritePdo(const pdo: TPdoStructure; const fname: string);
 
 
 implementation
+
+var
+  g_texStorage: TTextureStorage; //well well well...
 
 { Write PDO v4 or v5 header.
   Disables string shifting for v5 files. One hardcoded unknown value
@@ -161,12 +164,16 @@ end;
 
 { Write single texture }
 procedure WriteTexture(const f: TPdoStream; const t: TPdoTexture);
+var
+  data_ptr: pbyte;
 begin
+  data_ptr := g_texStorage.GetDataPointer(t.texture_id);
+
   f.WriteDWord(t.width);
   f.WriteDWord(t.height);
   f.WriteDWord(t.data_size + TEXTURE_DATA_WRAPPER_SIZE);
   f.WriteWord(t.data_header);
-  f.WriteBuffer(t.data^, t.data_size);
+  f.WriteBuffer(data_ptr^, t.data_size);
   f.WriteDWord(t.data_hash);
 end;
 
@@ -313,6 +320,7 @@ var
   f: TPdoStream;
 begin
   f := TPdoStream.Create;
+  g_texStorage := pdo.tex_storage;
 
   WriteHeader(f, pdo.header);
   WriteObjects(f, pdo.objects);

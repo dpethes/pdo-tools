@@ -24,22 +24,28 @@ type
   TTextureStorage = class
   private
       textures: array of TTexData;
+      _current_alloc_tex: TTexData;
+      _allocated: integer;
 
       procedure Decode(const id: integer);
   public
       constructor Create;
       destructor Destroy; override;
 
-      (* Creates new texture from compressed data and returns its ID.
-         Only reference to compressed data is stored, so the data has to remain valid during object usage
-         *)
-      function Insert(const data: pbyte; const data_size, width, height: integer): integer;
+      //Allocate new texture memory
+      function Alloc(const data_size, width, height: integer): pbyte;
+
+      (* Store new texture and return its ID. *)
+      function Insert(const checksum: longword): integer;
 
       (* Decodes all compressed data *)
       procedure DecodePixels;
 
       (* Returns a reference to decoded pixel data for given texture ID *)
       function GetPixels(const texture_id: integer): pbyte;
+
+      (* Returns a reference to allocated memory for compressed data of given texture ID *)
+      function GetDataPointer(const texture_id: integer): pbyte;
 
       //write all textures to file
       procedure DumpTextures(const path: string);
@@ -50,11 +56,8 @@ implementation
 uses
   gzip_format, crc;
 
-{ Get the Adler32 checksum stored at the end of zlib wrapper stream }
-function GetChecksum(const src: pbyte; const size: integer): longword;
-begin
-  result := BEtoN(PLongWord(src + size - 4)^);
-end;
+const
+  DECODE_PADDING = 4;
 
 { TTextureStorage }
 
@@ -65,14 +68,14 @@ var
   decoded_data: pbyte;
 begin
   compressed := textures[id].data;
-  compressed_size := textures[id].data_size + 4;  //TODO this is just a padding, why?
+  compressed_size := textures[id].data_size + DECODE_PADDING;  //TODO why is this padded?
   decoded_data := textures[id].pixels;
   LzDecodeBytes(compressed, compressed_size, decoded_data);
 end;
 
 constructor TTextureStorage.Create;
 begin
-
+  _allocated := 0;
 end;
 
 destructor TTextureStorage.Destroy;
@@ -81,29 +84,45 @@ var
 begin
   inherited Destroy;
   for i := 0 to Length(textures) - 1 do begin
+      freemem(textures[i].data);
       freemem(textures[i].pixels);
   end;
+end;
+
+{ Allocate memory for a new texture }
+function TTextureStorage.Alloc(const data_size, width, height: integer): pbyte;
+begin
+  _current_alloc_tex.data := GetMem(data_size + DECODE_PADDING);  //TODO why padding?
+  _current_alloc_tex.data_size := data_size;
+  _current_alloc_tex.width := width;
+  _current_alloc_tex.height := height;
+
+  result := _current_alloc_tex.data;
+  _allocated += 1;
 end;
 
 { Insert new texture and return its ID.
   In case of a duplicate, return previous ID
 }
-function TTextureStorage.Insert(const data: pbyte; const data_size, width, height: integer): integer;
+function TTextureStorage.Insert(const checksum: longword): integer;
 var
-  idx: integer;
-  tex: TTexData;
-  i: Integer;
+  idx, i: integer;
+  t: TTexData;
 begin
-  tex.data := data;
-  tex.data_size := data_size;
-  tex.width := width;
-  tex.height := height;
-  tex.decompressed := false;
-  tex.pixels := nil;
-  tex.checksum := GetChecksum(data, data_size);
+  Assert(_current_alloc_tex.data <> nil, 'No texture allocated');
+  t.data      := _current_alloc_tex.data;
+  t.data_size := _current_alloc_tex.data_size;
+  t.width     := _current_alloc_tex.width;
+  t.height    := _current_alloc_tex.height;
+  t.decompressed := false;
+  t.pixels := nil;
+  t.checksum := BEtoN(checksum); //probably don't need to bswap it
+
+  _current_alloc_tex.data := nil;
 
   for i := 0 to Length(textures) - 1 do begin
-      if textures[i].checksum = tex.checksum then begin
+      if textures[i].checksum = t.checksum then begin
+          Freemem(t.data);  //we won't need the data anymore
           result := i;
           exit;
       end;
@@ -111,7 +130,7 @@ begin
 
   idx := Length(textures);
   SetLength(textures, idx + 1);
-  textures[idx] := tex;
+  textures[idx] := t;
 
   result := idx;
 end;
@@ -127,6 +146,7 @@ begin
       Decode(i);
       textures[i].decompressed := true;
   end;
+  //writeln('allocated ', _allocated, ', used ', Length(textures));
 end;
 
 procedure TTextureStorage.DumpTextures(const path: string);
@@ -186,6 +206,15 @@ begin
       textures[texture_id].decompressed := true;
   end;
   Result := tex.pixels;
+end;
+
+function TTextureStorage.GetDataPointer(const texture_id: integer): pbyte;
+var
+  tex: TTexData;
+begin
+  Assert(texture_id >= 0);
+  tex := textures[texture_id];
+  result := tex.data;
 end;
 
 end.

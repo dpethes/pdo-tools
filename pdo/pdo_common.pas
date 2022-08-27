@@ -28,7 +28,7 @@ type
       data_size: longword;
       data_header: word;
       data_hash: longword;
-      data: pbyte;
+      //data: pbyte;  //managed by tex_storage, use texture_id instead
       texture_id: integer;
   end;
 

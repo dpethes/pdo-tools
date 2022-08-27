@@ -83,8 +83,8 @@ begin
   SetLength(result.colors, num_materials);
 
   for i := 0 to num_materials - 1 do begin
-      tex := pdo.materials[i].texture;
-      if tex.data <> nil then begin
+      if pdo.materials[i].has_texture then begin
+          tex := pdo.materials[i].texture;
           tex_data := pdo.tex_storage.GetPixels(tex.texture_id);
           result.textures[i].width  := tex.width;
           result.textures[i].height := tex.height;
