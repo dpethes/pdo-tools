@@ -247,8 +247,12 @@ begin
           end;
           RewritePdo(fname + '_new.pdo', pdo);
       end;
-      if optSet('x') then
-          pdo.GetStructure.tex_storage.DumpTextures(ImageDumpPath);
+      if optSet('x') then begin
+          if DirectoryExists(ImageDumpPath) then
+              pdo.GetStructure.tex_storage.DumpTextures(ImageDumpPath)
+          else
+              writeln('target path does not exist: ', ImageDumpPath);
+      end;
   end;
   t_processing := GetMsecs - t_processing;
   writeln('processing time: ', (t_processing / 1000):5:2);
